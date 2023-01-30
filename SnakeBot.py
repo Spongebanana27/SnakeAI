@@ -7,8 +7,13 @@ import time
 ## OUTPUT: 0 (right), 1 (down), 2 (left), 3 (right)
 
 IN_SIZE = 9
-HID1_SIZE = 18
-HID2_SIZE = 4
+HID1_SIZE = 7
+HID2_SIZE = 5
+
+MUTATION_CHANCE = .25
+ALPHA = .0001
+
+MUTATION_UPPER_BOUND = int(3 / MUTATION_CHANCE)
 
 # Sets negative values to 0, else returns x
 def relu(x):
@@ -17,7 +22,7 @@ def relu(x):
 class SnakeBot:
 
     def __init__(self):
-        self.snek = snake.Snake()
+        self.rep = snake.Snake()
         self.watched = False
         self.score = 0
         self.totalTurns =  0
@@ -39,12 +44,12 @@ class SnakeBot:
                 self.frameArray[row][col].grid(row=row,column=col)
 
     def updateView(self):
-        self.frameArray[self.snek.afterLast[0]][self.snek.afterLast[1]].configure(bg="gray")
-        self.frameArray[self.snek.snake[len(self.snek.snake) - 1][0]][self.snek.snake[len(self.snek.snake) - 1][1]].configure(bg="black")
-        tempRow = self.snek.food[0]
-        tempCol = self.snek.food[1]
+        self.frameArray[self.rep.afterLast[0]][self.rep.afterLast[1]].configure(bg="gray")
+        self.frameArray[self.rep.snake[len(self.rep.snake) - 1][0]][self.rep.snake[len(self.rep.snake) - 1][1]].configure(bg="black")
+        tempRow = self.rep.food[0]
+        tempCol = self.rep.food[1]
         self.frameArray[tempRow][tempCol].configure(bg="gray")
-        self.frameArray[self.snek.food[0]][self.snek.food[1]].configure(bg="black")
+        self.frameArray[self.rep.food[0]][self.rep.food[1]].configure(bg="black")
         self.window.update()
 
     def loadWeights(self, weights):
@@ -53,14 +58,28 @@ class SnakeBot:
         self.h1_h2 = self.weights[1]
         self.h2_out = self.weights[2]
 
-    def changeWeightsABit(self):
-        self.in_h1 += (np.random.normal(0, .00005, (IN_SIZE, HID1_SIZE)) / 100)
-        self.h1_h2 += (np.random.normal(0, .00005, (HID1_SIZE, 4)) / 100)
-        self.h2_out += np.random.normal(0, .02, (HID2_SIZE, 4))
+    def mutate(self):
+
+        x = np.random.randint(0, MUTATION_UPPER_BOUND)
+        match x:
+            case 0:
+                self.in_h1 += (np.random.normal(0, ALPHA, (IN_SIZE, HID1_SIZE)))
+            case 1:
+                self.h1_h2 += (np.random.normal(0, ALPHA, (HID1_SIZE, HID2_SIZE)))
+            case 2:
+                self.h2_out += np.random.normal(0, ALPHA, (HID2_SIZE, 4))
+        x = np.random.randint(0, MUTATION_UPPER_BOUND)
+        match x:
+            case 0:
+                self.in_h1 += (np.random.normal(0, ALPHA, (IN_SIZE, HID1_SIZE)))
+            case 1:
+                self.h1_h2 += (np.random.normal(0, ALPHA, (HID1_SIZE, HID2_SIZE)))
+            case 2:
+                self.h2_out += np.random.normal(0, ALPHA, (HID2_SIZE, 4))
 
     def generateRandomWeights(self):
         self.in_h1 = np.zeros((IN_SIZE, HID1_SIZE))
-        self.h1_h2 = np.zeros((HID1_SIZE, 4))
+        self.h1_h2 = np.zeros((HID1_SIZE, HID2_SIZE))
         self.h2_out = np.zeros((HID2_SIZE, 4))
         self.weights = [self.in_h1, self.h1_h2, self.h2_out]
 
@@ -72,50 +91,50 @@ class SnakeBot:
         self.lifetime += 1
 
         if(self.watched):
-            time.sleep(.5)
+            time.sleep(.25)
 
         ## Gather inputs
-        x = self.snek.snake[len(self.snek.snake) - 1][0]
-        y = self.snek.snake[len(self.snek.snake) - 1][1]
-        xFood = self.snek.food[0]
-        yFood = self.snek.food[1]
-        direction = self.snek.dir
-        nearestUp = self.snek.nearestUp
-        nearestDown = self.snek.nearestDown
-        nearestLeft = self.snek.nearestLeft
-        nearestRight = self.snek.nearestRight
+        x = self.rep.snake[len(self.rep.snake) - 1][0]
+        y = self.rep.snake[len(self.rep.snake) - 1][1]
+        xFood = self.rep.food[0]
+        yFood = self.rep.food[1]
+        direction = self.rep.dir
+        nearestUp = self.rep.nearestUp
+        nearestDown = self.rep.nearestDown
+        nearestLeft = self.rep.nearestLeft
+        nearestRight = self.rep.nearestRight
 
         input = np.array([x,y, xFood, yFood, direction,nearestRight,nearestDown,nearestLeft,nearestUp])
 
         ## Run network
 
         h1 = relu(input.dot(self.in_h1))
-        h2 = h1.dot(self.h1_h2)
-        # out = h2.dot(self.h2_out)
+        h2 = relu(h1.dot(self.h1_h2))
+        out = h2.dot(self.h2_out)
+        self.newDir = np.argmax(out)
 
-        self.newDir = np.argmax(h2)
-            
+        ## Change snake direction and move
+
+        self.rep.changeDir(self.newDir)
+        prevSize = self.rep.size
+        self.rep.move()
+
+        ## Update score
+
         match self.newDir:
                 case 0:
                     if(xFood > x):
-                        self.score += 5
+                        self.score += int(10 / (xFood-x))
                 case 1:
                     if(yFood < y):
-                        self.score += 5
+                        self.score += int(10 / (y-yFood))
                 case 2:
                     if(xFood < x):
-                        self.score += 5
+                        self.score += int(10 / (x-xFood))
                 case 3:
                     if(yFood > y):
-                        self.score += 5
-
-        ## Change snake direction
-
-        self.snek.changeDir(self.newDir)
-
-        size = self.snek.size
-        self.snek.move()
-        if(self.snek.size > size):
+                        self.score += int(10 / (yFood-y))
+        if(self.rep.size > prevSize):
             self.score += 50
 
         if(self.watched):
@@ -129,24 +148,3 @@ class SnakeBot:
             print("Nearest Left: " + str(nearestLeft))
             print("Nearest Right: " + str(nearestRight))
             self.updateView()
-
-
-# snek = SnakeBot()
-
-# snek.generateRandomWeights()
-
-# outFile = open('weights\\gen0.npy', 'wb')
-# inFile = open('weights\\gen0.npy', 'rb')
-
-# snek.saveWeights(outFile)
-# snek.loadWeights(inFile)
-
-# print(snek.in_h1)
-# print(snek.h1_h2)
-# print(snek.h2_out)
-    
-# snek.startWatching()
-
-# while not snek.snek.isColliding():
-#     snek.tick()
-#     time.sleep(.2)
