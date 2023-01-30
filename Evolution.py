@@ -1,72 +1,101 @@
 import SnakeBot
 import numpy as np
+import sys
+import time
 
-generation = 1
-generationSize = 100
-totalGenerations = 1000
+# Second attempt at evolutionary algorithm. This one will save the top 10% snakes from the population and randomly select 2 to pass on their weights
 
-bot = SnakeBot.SnakeBot()
-bot.generateRandomWeights()
-bot.saveWeights(open("weights\\gen0.npy", 'wb'))
-    
-bestWeights = np.load(open("weights\\gen0.npy", 'rb'))
-secondBestWeights = np.load(open("weights\\gen0.npy", 'rb'))
+def evolve(generations, startingGeneration):
 
-while generation < totalGenerations:
+    generation = startingGeneration
+    generationSize = 500
+    totalGenerations = generations
 
-    genBest = 0
-    genSecondBest = 0
+    newBot = SnakeBot.SnakeBot()
 
-    avg = 0
+    if(startingGeneration == 0):
+        newBot.generateRandomWeights()
+    else:
+        weights = np.load(open("weights\\gen"+str(startingGeneration)+".npy", "rb"))
+        newBot.in_h1 = weights['inh1']
+        newBot.h1_h2 = weights['h1h2']
+        newBot.h2_out = weights['h2out']
+        newBot.weights=[newBot.in_h1, newBot.h1_h2, newBot.h2_out]
 
-    for i in range(generationSize):
+    currentWeights = newBot.weights
+    parent1 = currentWeights
+    parent2 = currentWeights
 
-        newBot = SnakeBot.SnakeBot()
-        newBot.loadWeights(open("weights\\gen" + str(generation - 1) + ".npy", 'rb'))
-        newBot.changeWeightsABit()
+    allScores = []
 
-        while not newBot.snek.isColliding() and newBot.lifetime < 200:
-            newBot.tick()
+    while generation <= totalGenerations:
 
-        score = newBot.score  + (newBot.snek.size * 10) + (newBot.lifetime * 2)
+        avg = 0
+        median = 0
 
-        if score > genBest:
-            genBest = score
-            newBot.saveWeights(open("weights\\gen" + str(generation) + ".npy", 'wb'))
-            bestSize = newBot.snek.size
+        allScores = []
 
-        # if score > genBest:
-        #     secondBestWeights = bestWeights
-        #     genSecondBest = genBest
-        #     genBest = score
-        #     bestSize = newBot.snek.size
-        #     bestWeights = newBot.weights
-        # elif score > genSecondBest:
-        #     genSecondBest = score
-        #     secondBestWeights = newBot.weights
+        topScores = [-20]
+        topWeights = [[currentWeights]]
 
-        avg += score
+        for i in range(generationSize):
 
-    avg /= generationSize
-    
-    # # Average the top two weights and pass that on
+            score = 0
+            newBot.reset()
+            newBot.generateRandomWeights()
+            newBot.lifetime = 0
 
-    # newWeights0 = (bestWeights['inh1'] + secondBestWeights['inh1']) / 2.0
-    # newWeights1 = (bestWeights['h1h2'] + secondBestWeights['h1h2']) / 2.0
-    # newWeights2 = (bestWeights['h2out'] + secondBestWeights['h2out']) / 2.0
+            ## Reproduce and mutate a new SnakeBot
+            newBot.in_h1, newBot.h1_h2, newBot.h2_out = np.copy(parent1[0]), np.copy(parent1[1]), np.copy(parent1[2])
+            x = np.random.randint(1, 3)
+            if(x == 2):
+                newBot.in_h1 = np.copy(parent2[0])
+            x = np.random.randint(1, 3)
+            if(x == 2):
+                newBot.h1_h2 = np.copy(parent2[1])
+            x = np.random.randint(1, 3)
+            if(x == 2):
+                newBot.h2_out = np.copy(parent2[2])
+            newBot.mutate()
 
-    # np.savez(open("weights\\gen" + str(generation) + ".npy", 'wb'), inh1=newWeights0, h1h2=newWeights1, h2out=newWeights2)
+            ## Run SnakeBot
+            while not newBot.rep.isColliding() and newBot.lifetime < 1000:
+                newBot.tick()
 
-    print("Generation: " + str(generation))
-    print("Best GenScore: " + str(genBest))
-    print("Size of best bot: " + str(bestSize))
-    print("Avg score: " + str(avg))
+            score = newBot.score
+            allScores.append(score)
 
-    generation += 1
+            j = 0
+            found = False
+            while j < (len(topWeights)) and not found and j <= generationSize / 10:
+                if(score > topScores[j]):
+                    topScores.insert(j, score)
+                    topWeights.insert(j, [np.copy(newBot.in_h1),np.copy(newBot.h1_h2),np.copy(newBot.h2_out)])
+                    found = True
+                j += 1
 
-newBot = SnakeBot.SnakeBot()
-newBot.loadWeights(open("weights\\gen98.npy", 'rb'))
-newBot.startWatching()
-while not newBot.snek.isColliding() and newBot.lifetime < 200:
-    newBot.tick()
-    print(newBot.score)
+            avg += score
+
+        avg /= generationSize
+        median = int(allScores[int(generationSize / 2)])
+
+        # Pick 2 random weights from the top x% to go to next generation
+        x, y = np.random.randint(0, 10), np.random.randint(0, 10)
+        parent1 = topWeights[x]
+        parent2 = topWeights[y]
+
+        currentWeights = topWeights[0]
+
+        if generation % 50 == 0:
+            np.savez(open("weights\\gen"+str(generation)+".npy", 'wb'), inh1=np.copy(currentWeights[0]), h1h2=np.copy(currentWeights[1]), h2out=np.copy(currentWeights[2]))
+
+        allScores.sort()
+
+        sys.stdout.write("Generation: " + str(generation) + ' \n')
+        sys.stdout.write("Best GenScore: " + str(int(topScores[0])) + '   \n')
+        sys.stdout.write("Avg Score: " + str(int(avg)) + '     \n')
+        sys.stdout.write("Median Score: " + str(int(median)) + '    \r\033[A\033[A\033[A')
+
+        generation += 1
+
+evolve(5001, 0)

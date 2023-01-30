@@ -1,7 +1,7 @@
 import numpy as np
 import SnakeBot
 
-weights = np.load(open("weights\\gen2400.npy", "rb"))
+weights = np.load(open("weights\\gen2000.npy", "rb"))
 
 newBot = SnakeBot.SnakeBot()
 
@@ -11,6 +11,6 @@ newBot.h2_out = weights['h2out']
 
 newBot.startWatching()
 print("\n\n\n\n")
-while not newBot.snek.isColliding() and newBot.lifetime < 200:
+while not newBot.rep.isColliding() and newBot.lifetime < 200:
     newBot.tick()
-    print(newBot.score + (newBot.snek.size * 10) + newBot.lifetime)
+    print(newBot.score)

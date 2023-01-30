@@ -10,7 +10,7 @@ IN_SIZE = 9
 HID1_SIZE = 7
 HID2_SIZE = 5
 
-MUTATION_CHANCE = .25
+MUTATION_CHANCE = .50
 ALPHA = .0001
 
 MUTATION_UPPER_BOUND = int(3 / MUTATION_CHANCE)
@@ -113,11 +113,10 @@ class SnakeBot:
         out = h2.dot(self.h2_out)
         self.newDir = np.argmax(out)
 
-        ## Change snake direction and move
+        ## Change snake direction
 
         self.rep.changeDir(self.newDir)
         prevSize = self.rep.size
-        self.rep.move()
 
         ## Update score
 
@@ -134,8 +133,11 @@ class SnakeBot:
                 case 3:
                     if(yFood > y):
                         self.score += int(10 / (yFood-y))
+        
+        self.rep.move()
+
         if(self.rep.size > prevSize):
-            self.score += 50
+            self.score += 500
 
         if(self.watched):
             print("X: " + str(x))
