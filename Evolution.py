@@ -1,101 +1,101 @@
 import SnakeBot
+import SnakeBotFullVision
 import numpy as np
 import sys
-import time
 
 # Second attempt at evolutionary algorithm. This one will save the top 10% snakes from the population and randomly select 2 to pass on their weights
 
-def evolve(generations, startingGeneration):
 
-    generation = startingGeneration
-    generationSize = 500
-    totalGenerations = generations
 
-    newBot = SnakeBot.SnakeBot()
+startingGeneration = 0
+generationSize = 500
+totalGenerations = 5000
 
-    if(startingGeneration == 0):
-        newBot.generateRandomWeights()
-    else:
-        weights = np.load(open("weights\\gen"+str(startingGeneration)+".npy", "rb"))
-        newBot.in_h1 = weights['inh1']
-        newBot.h1_h2 = weights['h1h2']
-        newBot.h2_out = weights['h2out']
-        newBot.weights=[newBot.in_h1, newBot.h1_h2, newBot.h2_out]
+generation = 0
 
-    currentWeights = newBot.weights
-    parent1 = currentWeights
-    parent2 = currentWeights
+newBot = SnakeBot.SnakeBot()
+
+if(startingGeneration == 0):
+    newBot.generateRandomWeights()
+else:
+    weights = np.load(open("weights\\gen"+str(startingGeneration)+".npy", "rb"))
+    newBot.in_h1 = weights['inh1']
+    newBot.h1_h2 = weights['h1h2']
+    newBot.h2_out = weights['h2out']
+    newBot.weights=[newBot.in_h1, newBot.h1_h2, newBot.h2_out]
+
+currentWeights = newBot.weights
+parent1 = currentWeights
+parent2 = currentWeights
+
+allScores = []
+
+while generation <= totalGenerations:
+
+    avg = 0
+    median = 0
 
     allScores = []
 
-    while generation <= totalGenerations:
+    topScores = [-20]
+    topWeights = [[currentWeights]]
 
-        avg = 0
-        median = 0
+    for i in range(generationSize):
 
-        allScores = []
+        score = 0
+        newBot.reset()
+        newBot.generateRandomWeights()
+        newBot.lifetime = 0
 
-        topScores = [-20]
-        topWeights = [[currentWeights]]
+        ## Reproduce and mutate a new SnakeBot
+        newBot.in_h1, newBot.h1_h2, newBot.h2_out = np.copy(parent1[0]), np.copy(parent1[1]), np.copy(parent1[2])
+        x = np.random.randint(1, 3)
+        if(x == 2):
+            newBot.in_h1 = np.copy(parent2[0])
+        x = np.random.randint(1, 3)
+        if(x == 2):
+            newBot.h1_h2 = np.copy(parent2[1])
+        x = np.random.randint(1, 3)
+        if(x == 2):
+            newBot.h2_out = np.copy(parent2[2])
+        newBot.mutate()
 
-        for i in range(generationSize):
+        ## Run SnakeBot
+        while not newBot.rep.isColliding() and newBot.lifetime < 1000:
+            newBot.tick()
 
-            score = 0
-            newBot.reset()
-            newBot.generateRandomWeights()
-            newBot.lifetime = 0
+        score = newBot.score
+        allScores.append(score)
 
-            ## Reproduce and mutate a new SnakeBot
-            newBot.in_h1, newBot.h1_h2, newBot.h2_out = np.copy(parent1[0]), np.copy(parent1[1]), np.copy(parent1[2])
-            x = np.random.randint(1, 3)
-            if(x == 2):
-                newBot.in_h1 = np.copy(parent2[0])
-            x = np.random.randint(1, 3)
-            if(x == 2):
-                newBot.h1_h2 = np.copy(parent2[1])
-            x = np.random.randint(1, 3)
-            if(x == 2):
-                newBot.h2_out = np.copy(parent2[2])
-            newBot.mutate()
+        j = 0
+        found = False
+        while j < (len(topWeights)) and not found and j <= generationSize / 10:
+            if(score > topScores[j]):
+                topScores.insert(j, score)
+                topWeights.insert(j, [np.copy(newBot.in_h1),np.copy(newBot.h1_h2),np.copy(newBot.h2_out)])
+                found = True
+            j += 1
 
-            ## Run SnakeBot
-            while not newBot.rep.isColliding() and newBot.lifetime < 1000:
-                newBot.tick()
+        avg += score
 
-            score = newBot.score
-            allScores.append(score)
+    avg /= generationSize
+    median = int(allScores[int(generationSize / 2)])
 
-            j = 0
-            found = False
-            while j < (len(topWeights)) and not found and j <= generationSize / 10:
-                if(score > topScores[j]):
-                    topScores.insert(j, score)
-                    topWeights.insert(j, [np.copy(newBot.in_h1),np.copy(newBot.h1_h2),np.copy(newBot.h2_out)])
-                    found = True
-                j += 1
+    # Pick 2 random weights from the top x% to go to next generation
+    x, y = np.random.randint(0, 10), np.random.randint(0, 10)
+    parent1 = topWeights[x]
+    parent2 = topWeights[y]
 
-            avg += score
+    currentWeights = topWeights[0]
 
-        avg /= generationSize
-        median = int(allScores[int(generationSize / 2)])
+    if generation % 50 == 0:
+        np.savez(open("weights\\gen"+str(generation)+".npy", 'wb'), inh1=np.copy(currentWeights[0]), h1h2=np.copy(currentWeights[1]), h2out=np.copy(currentWeights[2]))
 
-        # Pick 2 random weights from the top x% to go to next generation
-        x, y = np.random.randint(0, 10), np.random.randint(0, 10)
-        parent1 = topWeights[x]
-        parent2 = topWeights[y]
+    allScores.sort()
 
-        currentWeights = topWeights[0]
+    sys.stdout.write("Generation: " + str(generation) + ' \n')
+    sys.stdout.write("Best GenScore: " + str(int(topScores[0])) + '   \n')
+    sys.stdout.write("Avg Score: " + str(int(avg)) + '     \n')
+    sys.stdout.write("Median Score: " + str(int(median)) + '    \r\033[A\033[A\033[A')
 
-        if generation % 50 == 0:
-            np.savez(open("weights\\gen"+str(generation)+".npy", 'wb'), inh1=np.copy(currentWeights[0]), h1h2=np.copy(currentWeights[1]), h2out=np.copy(currentWeights[2]))
-
-        allScores.sort()
-
-        sys.stdout.write("Generation: " + str(generation) + ' \n')
-        sys.stdout.write("Best GenScore: " + str(int(topScores[0])) + '   \n')
-        sys.stdout.write("Avg Score: " + str(int(avg)) + '     \n')
-        sys.stdout.write("Median Score: " + str(int(median)) + '    \r\033[A\033[A\033[A')
-
-        generation += 1
-
-evolve(5001, 0)
+    generation += 1
